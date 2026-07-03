@@ -1,0 +1,25 @@
+command:
+  - uvicorn
+  - main:app
+  - --host
+  - "0.0.0.0"
+  - --port
+  - "8000"
+
+env:
+  - name: CATALOG
+    value: "classic_stable_ytcy_catalog"
+  - name: SCHEMA
+    value: "cad_image_search"
+  - name: VOLUME
+    value: "cad_image"
+  - name: DATABRICKS_WAREHOUSE_ID
+    value: "e351c2d1b16eae95"
+  - name: VS_ENDPOINT_NAME
+    value: "cad-image-search-endpoint"
+  - name: VS_INDEX_NAME
+    value: "classic_stable_ytcy_catalog.cad_image_search.cad_image_index"
+  - name: GEMINI_ENDPOINT
+    value: "databricks-gemini-2-5-flash"
+  - name: EMBEDDING_ENDPOINT
+    value: "databricks-gte-large-en"
