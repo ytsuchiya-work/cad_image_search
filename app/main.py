@@ -16,8 +16,8 @@ import traceback
 import uuid
 from pathlib import Path
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
-from fastapi.responses import StreamingResponse
+from fastapi import FastAPI, File, HTTPException, Request, UploadFile
+from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from db_client import DBClient, T_IMAGES, VOLUME_ROOT
@@ -27,6 +27,14 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name
 logger = logging.getLogger("cad_image_search")
 
 app = FastAPI(title="CAD Image Search")
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    # フロントエンドは常にJSONを期待するため、想定外の例外もJSONで返す
+    # (素の500 "Internal Server Error" テキストだとフロントのJSON.parseが壊れる)
+    logger.exception("unhandled exception on %s %s", request.method, request.url.path)
+    return JSONResponse(status_code=500, content={"detail": f"{type(exc).__name__}: {exc}"})
 
 db = DBClient()
 analyzer = ImageAnalyzer()
