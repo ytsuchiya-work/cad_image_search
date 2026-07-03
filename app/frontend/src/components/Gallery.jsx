@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import ResultCard from './ResultCard.jsx'
 
-export default function Gallery({ onZoom }) {
+export default function Gallery({ onShowDetail }) {
   const [images, setImages] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -40,39 +40,41 @@ export default function Gallery({ onZoom }) {
   if (loading) return <p className="status-line">読み込み中...</p>
 
   return (
-    <div>
-      {error && <div className="error-box">{error}</div>}
+    <div className="layout-with-sidebar">
+      <div className="main-column">
+        {error && <div className="error-box">{error}</div>}
+        <div className="section-title">登録済み画像 ({images.length}件)</div>
+        <div className="grid">
+          {images.map((img) => (
+            <ResultCard key={img.image_id} image={img} onFindSimilar={findSimilar} onShowDetail={onShowDetail} />
+          ))}
+        </div>
+        {images.length === 0 && (
+          <p className="status-line">
+            登録済みの画像がありません。README記載の /api/admin/reindex を実行してください。
+          </p>
+        )}
+      </div>
 
       {searchTarget && (
-        <div className="analysis-box">
+        <aside className="results-sidebar">
           <div className="result-header">
-            <strong>「{searchTarget.filename}」に類似する画像</strong>
+            <strong>類似画像</strong>
             <button className="ghost" onClick={() => { setSearchTarget(null); setResults(null) }}>
               閉じる
             </button>
           </div>
+          <div className="status-line" style={{ marginBottom: 8 }}>
+            起点: {searchTarget.filename}
+          </div>
           {searching && <p className="status-line"><span className="spinner" /> 検索中...</p>}
-          {results && (
-            <div className="grid" style={{ marginTop: 12 }}>
-              {results.length === 0 && <p className="status-line">類似する画像が見つかりませんでした。</p>}
-              {results.map((r) => (
-                <ResultCard key={r.image_id} image={r} score={r.score} onZoom={onZoom} />
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      <div className="section-title">登録済み画像 ({images.length}件)</div>
-      <div className="grid">
-        {images.map((img) => (
-          <ResultCard key={img.image_id} image={img} onFindSimilar={findSimilar} onZoom={onZoom} />
-        ))}
-      </div>
-      {images.length === 0 && (
-        <p className="status-line">
-          登録済みの画像がありません。README記載の /api/admin/reindex を実行してください。
-        </p>
+          <div className="sidebar-list">
+            {results && results.length === 0 && <p className="status-line">類似する画像が見つかりませんでした。</p>}
+            {results && results.map((r) => (
+              <ResultCard key={r.image_id} image={r} score={r.score} onShowDetail={onShowDetail} vertical />
+            ))}
+          </div>
+        </aside>
       )}
     </div>
   )

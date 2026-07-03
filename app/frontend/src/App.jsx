@@ -1,10 +1,15 @@
 import { useState } from 'react'
 import Gallery from './components/Gallery.jsx'
 import UploadPanel from './components/UploadPanel.jsx'
+import DetailModal from './components/DetailModal.jsx'
 
 export default function App() {
   const [tab, setTab] = useState('gallery')
-  const [lightbox, setLightbox] = useState(null)
+  const [detail, setDetail] = useState(null) // { image, score }
+
+  function showDetail(image, score) {
+    setDetail({ image, score })
+  }
 
   return (
     <>
@@ -25,14 +30,12 @@ export default function App() {
       </nav>
 
       <main>
-        {tab === 'gallery' && <Gallery onZoom={setLightbox} />}
-        {tab === 'upload' && <UploadPanel onZoom={setLightbox} />}
+        {tab === 'gallery' && <Gallery onShowDetail={showDetail} />}
+        {tab === 'upload' && <UploadPanel onShowDetail={showDetail} />}
       </main>
 
-      {lightbox && (
-        <div className="lightbox-overlay" onClick={() => setLightbox(null)}>
-          <img src={lightbox} alt="preview" />
-        </div>
+      {detail && (
+        <DetailModal image={detail.image} score={detail.score} onClose={() => setDetail(null)} />
       )}
     </>
   )
