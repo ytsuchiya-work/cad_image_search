@@ -1,10 +1,16 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import ResultCard from './ResultCard.jsx'
+
+function parseTags(image) {
+  return (image.tags || '').split(',').map((t) => t.trim()).filter(Boolean)
+}
 
 export default function Gallery({ onShowDetail }) {
   const [images, setImages] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+
+  const [selectedTags, setSelectedTags] = useState([])
 
   const [searchTarget, setSearchTarget] = useState(null)
   const [searching, setSearching] = useState(false)
@@ -17,6 +23,26 @@ export default function Gallery({ onShowDetail }) {
       .catch((e) => setError(String(e)))
       .finally(() => setLoading(false))
   }, [])
+
+  const allTags = useMemo(() => {
+    const set = new Set()
+    images.forEach((img) => parseTags(img).forEach((t) => set.add(t)))
+    return [...set].sort((a, b) => a.localeCompare(b, 'ja'))
+  }, [images])
+
+  const filteredImages = useMemo(() => {
+    if (selectedTags.length === 0) return images
+    return images.filter((img) => {
+      const imgTags = parseTags(img)
+      return selectedTags.every((t) => imgTags.includes(t))
+    })
+  }, [images, selectedTags])
+
+  function toggleTag(tag) {
+    setSelectedTags((prev) =>
+      prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]
+    )
+  }
 
   async function findSimilar(image) {
     setSearchTarget(image)
@@ -43,9 +69,36 @@ export default function Gallery({ onShowDetail }) {
     <div className="layout-with-sidebar">
       <div className="main-column">
         {error && <div className="error-box">{error}</div>}
-        <div className="section-title">登録済み画像 ({images.length}件)</div>
+
+        {allTags.length > 0 && (
+          <div className="filter-bar">
+            <div className="filter-bar-header">
+              <span className="filter-bar-title">タグで絞り込み</span>
+              {selectedTags.length > 0 && (
+                <button className="ghost" onClick={() => setSelectedTags([])}>
+                  フィルタを解除
+                </button>
+              )}
+            </div>
+            <div className="tag-chips">
+              {allTags.map((tag) => (
+                <button
+                  key={tag}
+                  className={selectedTags.includes(tag) ? 'tag-chip tag-chip-filter active' : 'tag-chip tag-chip-filter'}
+                  onClick={() => toggleTag(tag)}
+                >
+                  {tag}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div className="section-title">
+          登録済み画像 ({filteredImages.length}{selectedTags.length > 0 ? ` / ${images.length}` : ''}件)
+        </div>
         <div className="grid">
-          {images.map((img) => (
+          {filteredImages.map((img) => (
             <ResultCard key={img.image_id} image={img} onFindSimilar={findSimilar} onShowDetail={onShowDetail} />
           ))}
         </div>
@@ -53,6 +106,9 @@ export default function Gallery({ onShowDetail }) {
           <p className="status-line">
             登録済みの画像がありません。README記載の /api/admin/reindex を実行してください。
           </p>
+        )}
+        {images.length > 0 && filteredImages.length === 0 && (
+          <p className="status-line">選択したタグに一致する画像がありません。</p>
         )}
       </div>
 

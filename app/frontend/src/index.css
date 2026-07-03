@@ -126,6 +126,38 @@ main {
   border-radius: 999px;
 }
 
+.tag-chip-filter {
+  border: 1px solid transparent;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.tag-chip-filter.active {
+  background: var(--accent);
+  color: #fff;
+}
+
+.filter-bar {
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin-bottom: 16px;
+}
+
+.filter-bar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.filter-bar-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
 .card-actions {
   display: flex;
   flex-wrap: wrap;
