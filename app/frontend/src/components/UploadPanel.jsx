@@ -25,17 +25,27 @@ export default function UploadPanel({ onShowDetail }) {
     setError(null)
     setAnalysis(null)
     setResults(null)
+
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 90_000)
     try {
       const form = new FormData()
       form.append('file', file)
-      const resp = await fetch('/api/search/upload', { method: 'POST', body: form })
+      const resp = await fetch('/api/search/upload', { method: 'POST', body: form, signal: controller.signal })
       if (!resp.ok) throw new Error(await resp.text())
       const data = await resp.json()
       setAnalysis(data.analysis)
       setResults(data.results || [])
     } catch (e) {
-      setError(String(e))
+      if (e.name === 'AbortError') {
+        setError('画像の解析がタイムアウトしました。画像サイズを小さくするか、もう一度お試しください。')
+      } else if (e instanceof TypeError) {
+        setError('通信エラーが発生しました（ネットワーク切断、またはサーバー側のタイムアウトの可能性があります）。もう一度お試しください。')
+      } else {
+        setError(String(e))
+      }
     } finally {
+      clearTimeout(timeoutId)
       setLoading(false)
     }
   }

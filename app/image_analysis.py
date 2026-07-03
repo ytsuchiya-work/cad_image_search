@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import base64
+import io
 import json
 import logging
 import os
@@ -14,10 +15,40 @@ import re
 
 import requests
 from databricks.sdk import WorkspaceClient
+from PIL import Image
 
 logger = logging.getLogger(__name__)
 
 GEMINI_ENDPOINT = os.environ.get("GEMINI_ENDPOINT", "databricks-gemini-2-5-flash")
+
+# 高解像度・大容量の画像は縮小してからGeminiに送る。
+# 解析精度はほぼ変わらない一方、base64ペイロードとGeminiの処理時間を大きく減らせる。
+# 実際にアップロード検索が「TypeError: Failed to fetch」で失敗する事例が確認されており、
+# 原因は詳細な実CAD図面(大きい/複雑)でGemini応答が遅くなり、ブラウザ〜アプリ間のプロキシの
+# タイムアウトで接続が切られることだったため、この縮小処理で対策する。
+MAX_DIMENSION = 1600
+JPEG_QUALITY = 85
+
+
+def _shrink_for_analysis(image_bytes: bytes, mime_type: str) -> tuple[bytes, str]:
+    try:
+        img = Image.open(io.BytesIO(image_bytes))
+        img.load()
+    except Exception:
+        logger.warning("failed to decode image for resizing; sending as-is")
+        return image_bytes, mime_type
+
+    if img.width <= MAX_DIMENSION and img.height <= MAX_DIMENSION and len(image_bytes) <= 2 * 1024 * 1024:
+        return image_bytes, mime_type
+
+    img = img.convert("RGB")
+    scale = min(1.0, MAX_DIMENSION / max(img.width, img.height))
+    if scale < 1.0:
+        img = img.resize((max(1, int(img.width * scale)), max(1, int(img.height * scale))), Image.LANCZOS)
+
+    buf = io.BytesIO()
+    img.save(buf, format="JPEG", quality=JPEG_QUALITY)
+    return buf.getvalue(), "image/jpeg"
 
 _PROMPT = """あなたはCAD/CAE図面を分類する専門家です。この画像を分析し、必ず次のJSON 1つだけで応答してください。
 - Markdownコードフェンス禁止。JSON以外の文字を含めないこと。
@@ -46,6 +77,7 @@ class ImageAnalyzer:
 
     def analyze(self, image_bytes: bytes, mime_type: str = "image/png") -> dict:
         """画像バイト列を Gemini に渡し、{"tags": [...], "description": "..."} を返す."""
+        image_bytes, mime_type = _shrink_for_analysis(image_bytes, mime_type)
         b64 = base64.b64encode(image_bytes).decode()
         content = [
             {"type": "text", "text": _PROMPT},
