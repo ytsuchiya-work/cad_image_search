@@ -1,6 +1,7 @@
 """Databricks SQL warehouse / UC Volume / Vector Search クライアント."""
 from __future__ import annotations
 
+import io
 import logging
 import os
 import time
@@ -65,6 +66,9 @@ class DBClient:
     def download_from_volume(self, filename: str) -> bytes:
         resp = self.w.files.download(file_path=f"{VOLUME_ROOT}/{filename}")
         return resp.contents.read()
+
+    def upload_to_volume(self, filename: str, content: bytes) -> None:
+        self.w.files.upload(file_path=f"{VOLUME_ROOT}/{filename}", contents=io.BytesIO(content), overwrite=False)
 
     def _auth(self) -> dict:
         return self.w.config.authenticate()

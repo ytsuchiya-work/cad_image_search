@@ -5,7 +5,8 @@
   2. GET  /api/image/{id}/file     Volumeから画像バイトを配信（サムネイル/拡大表示）
   3. POST /api/search/similar/{id} 登録済み画像を起点にした類似画像検索
   4. POST /api/search/upload       アップロード画像をGeminiで解析→類似検索（保存はしない）
-  5. POST /api/admin/reindex       Volume内の未登録画像をGeminiで解析→登録→Vector Search同期
+  5. POST /api/gallery/add         アップロード画像をユーザーの選択でギャラリーに追加保存
+  6. POST /api/admin/reindex       Volume内の未登録画像をGeminiで解析→登録→Vector Search同期
 """
 from __future__ import annotations
 
@@ -16,7 +17,7 @@ import traceback
 import uuid
 from pathlib import Path
 
-from fastapi import FastAPI, File, HTTPException, Request, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -47,6 +48,19 @@ def _slugify(name: str) -> str:
     stem = Path(name).stem
     slug = re.sub(r"[^a-zA-Z0-9_-]+", "-", stem).strip("-").lower()
     return slug or uuid.uuid4().hex[:12]
+
+
+def _make_unique(candidate: str, existing: set[str], suffix_sep: str = "-") -> str:
+    """candidate が existing と衝突する場合、短いサフィックスを付けて一意にする."""
+    if candidate not in existing:
+        return candidate
+    stem = Path(candidate).stem
+    ext = Path(candidate).suffix
+    for _ in range(20):
+        attempt = f"{stem}{suffix_sep}{uuid.uuid4().hex[:6]}{ext}"
+        if attempt not in existing:
+            return attempt
+    return f"{stem}{suffix_sep}{uuid.uuid4().hex}{ext}"
 
 
 # ── 1) Gallery listing ──────────────────────────────────────────────────────
@@ -131,7 +145,51 @@ async def search_upload(file: UploadFile = File(...), num_results: int = 6):
     return {"analysis": analysis, "results": results}
 
 
-# ── 5) Admin: seed / re-index images already in the Volume ─────────────────
+# ── 5) User opt-in: persist an uploaded image into the gallery ─────────────
+
+@app.post("/api/gallery/add")
+async def add_to_gallery(
+    file: UploadFile = File(...),
+    tags: str = Form(...),
+    description: str = Form(...),
+):
+    """アップロード検索で表示した解析結果を、ユーザーの選択でギャラリーに永続化する.
+    再度Geminiを呼ばず、アップロード検索時に得た tags/description をそのまま使う。"""
+    if not file.filename:
+        raise HTTPException(400, "filename is empty")
+    suffix = Path(file.filename).suffix.lower()
+    if suffix not in ALLOWED_EXTENSIONS:
+        raise HTTPException(400, f"unsupported file type: {suffix}")
+
+    content = await file.read()
+    if len(content) > MAX_UPLOAD_BYTES:
+        raise HTTPException(400, "file too large (max 15MB)")
+
+    existing_files = set(db.list_volume_files())
+    filename = _make_unique(file.filename, existing_files)
+
+    existing_ids = {r["image_id"] for r in db.query(f"SELECT image_id FROM {T_IMAGES}")}
+    image_id = _make_unique(_slugify(filename), existing_ids)
+
+    tags_list = [t.strip() for t in tags.split(",") if t.strip()]
+    embedding_text = build_embedding_text(tags_list, description)
+
+    db.upload_to_volume(filename, content)
+    db.exec(
+        f"""INSERT INTO {T_IMAGES}
+              (image_id, filename, volume_path, tags, description, embedding_text, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, current_timestamp())""",
+        params=(
+            image_id, filename, f"{VOLUME_ROOT}/{filename}",
+            ", ".join(tags_list), description, embedding_text,
+        ),
+    )
+    sync_result = db.trigger_sync()
+
+    return {"image_id": image_id, "filename": filename, "sync": sync_result}
+
+
+# ── 6) Admin: seed / re-index images already in the Volume ─────────────────
 
 @app.post("/api/admin/reindex")
 async def reindex():

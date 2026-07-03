@@ -10,6 +10,10 @@ export default function UploadPanel({ onShowDetail }) {
   const [analysis, setAnalysis] = useState(null)
   const [results, setResults] = useState(null)
 
+  const [adding, setAdding] = useState(false)
+  const [addError, setAddError] = useState(null)
+  const [added, setAdded] = useState(null) // { image_id, filename }
+
   function handleFile(f) {
     if (!f) return
     setFile(f)
@@ -17,6 +21,8 @@ export default function UploadPanel({ onShowDetail }) {
     setAnalysis(null)
     setResults(null)
     setError(null)
+    setAdded(null)
+    setAddError(null)
   }
 
   async function runSearch() {
@@ -25,6 +31,8 @@ export default function UploadPanel({ onShowDetail }) {
     setError(null)
     setAnalysis(null)
     setResults(null)
+    setAdded(null)
+    setAddError(null)
 
     const controller = new AbortController()
     const timeoutId = setTimeout(() => controller.abort(), 90_000)
@@ -47,6 +55,26 @@ export default function UploadPanel({ onShowDetail }) {
     } finally {
       clearTimeout(timeoutId)
       setLoading(false)
+    }
+  }
+
+  async function addToGallery() {
+    if (!file || !analysis) return
+    setAdding(true)
+    setAddError(null)
+    try {
+      const form = new FormData()
+      form.append('file', file)
+      form.append('tags', analysis.tags.join(', '))
+      form.append('description', analysis.description)
+      const resp = await fetch('/api/gallery/add', { method: 'POST', body: form })
+      if (!resp.ok) throw new Error(await resp.text())
+      const data = await resp.json()
+      setAdded(data)
+    } catch (e) {
+      setAddError(e instanceof TypeError ? '通信エラーが発生しました。もう一度お試しください。' : String(e))
+    } finally {
+      setAdding(false)
     }
   }
 
@@ -90,6 +118,19 @@ export default function UploadPanel({ onShowDetail }) {
               ))}
             </div>
             <p style={{ margin: 0 }}>{analysis.description}</p>
+
+            <div className="card-actions" style={{ marginTop: 12 }}>
+              {added ? (
+                <span className="status-line" style={{ marginLeft: 0, color: '#1a7a3c' }}>
+                  ✓ ギャラリーに追加しました（「ギャラリーから検索」タブで確認できます）
+                </span>
+              ) : (
+                <button className="primary" disabled={adding} onClick={addToGallery}>
+                  {adding ? '追加中...' : 'この画像をギャラリーに追加する'}
+                </button>
+              )}
+            </div>
+            {addError && <div className="error-box">{addError}</div>}
           </div>
         )}
       </div>
